@@ -34,9 +34,9 @@ unordered_map<int, Server> server_map; //存储每个服务器的信息
 int server_index = 0; 
 unordered_map<int, Vm> vm_map;  //存储使用中的每个虚拟机的信息 
 
-void add(string vm_type, int id, vector<vector<int>>&, unordered_map<string,int>&);   
+void add(string vm_type, int id, vector<vector<int>>&, unordered_map<string,vector<int>>&);   
 void del(int id);
-void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>&, unordered_map<string,int>&);
+void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>&, unordered_map<string,vector<int>>&);
 
 int main() {
 	scanf("%d", &server_type_cnt);
@@ -45,7 +45,7 @@ int main() {
 		Server_type_info si;
 		cin >> ch >> si.type;
 		si.type.pop_back();
-		scanf("%d,%d,%d,%d)", &si.cpu, &si.memory, &si.hardware_cost, &si.daily_cost);
+		scanf("%d, %d, %d, %d)", &si.cpu, &si.memory, &si.hardware_cost, &si.daily_cost);
 		//cout << si.type << ' ' << si.cpu << ' ' << si.memory <<  endl;
 		server_type_map[si.type] = si;
 	}
@@ -55,7 +55,7 @@ int main() {
 		Vm_type_info vi;
 		cin >> ch >> vi.type;
 		vi.type.pop_back();
-		scanf("%d,%d,%d)", &vi.cpu, &vi.memory, &vi.on_double);
+		scanf("%d, %d, %d)", &vi.cpu, &vi.memory, &vi.on_double);
 		//cout << vi.type << ' ' << vi.cpu << vi.memory << ' ' << vi.on_double << endl;
 		vm_type_map[vi.type] = vi;
 	}
@@ -65,7 +65,7 @@ int main() {
 		int request_cnt;
 		scanf("%d", &request_cnt);
 		vector<vector<int>> server_and_node;  //记录当天每个虚拟机部署的服务器id和节点 
-		unordered_map<string, int> daily_add;  //记录当天每种服务器的购买数量 
+		unordered_map<string, vector<int>> daily_add;  //记录当天每种服务器的购买伪下标 
 		string op_type, vm_type;
 		int id;
 		while(request_cnt--) {
@@ -81,17 +81,51 @@ int main() {
 				del(id);
 			}
 		}
+		
 		printf("(purchase, %d)\n", daily_add.size());
+		int add_cnt = 0;
 		for (auto it = daily_add.begin(); it != daily_add.end(); ++it) {
-			cout << '(' << it->first << ", " << it->second << ")\n";
+			cout << '(' << it->first << ", " << it->second.size() << ")\n";
+			add_cnt += it->second.size();
 		}
 ////// 当前不考虑虚拟机迁移 
 		printf("(migration, %d)\n", 0);
+		
+		vector<Server> fake_servers(add_cnt);
+		for (int k = server_index - add_cnt; k < server_index; ++k) {
+			fake_servers[k-(server_index - add_cnt)] = server_map[k];
+		} 
+		unordered_map<int,int> fake_to_true_index;
+		int j = server_index - add_cnt;
+		for (auto it = daily_add.begin(); it != daily_add.end(); ++it) {
+			vector<int>& vec = it->second;
+			for (int fake_index : vec) {
+				Server& s = fake_servers[fake_index - (server_index - add_cnt)];
+				for (list<int>& l : s.nodes) {
+					for (int& vm_id : l) {
+						vm_map[vm_id].server_id = j;
+					}
+				}
+				server_map[j] = s;
+				fake_to_true_index[fake_index] = j;
+				j += 1;
+			}
+		}
+		
+		
 		for (vector<int>& vec : server_and_node) {
 			if (vec.size() == 1) {
-				printf("(%d)\n", vec[0]);
+				if (fake_to_true_index.count(vec[0]))
+					printf("(%d)\n", fake_to_true_index[vec[0]]);
+				else  //用的服务器id是正确的，不用转换 
+					printf("(%d)\n", vec[0]);
 			}
-			else printf("(%d, %c)\n", vec[0], vec[1] + 'A');
+			else {
+				if (fake_to_true_index.count(vec[0]))
+					printf("(%d, %c)\n", fake_to_true_index[vec[0]], vec[1] + 'A');
+				else
+					printf("(%d, %c)\n", vec[0], vec[1] + 'A');
+			}
 		} 
 //		cout << endl;
 //		for (auto it = server_map.begin(); it != server_map.end(); ++it) {
@@ -104,7 +138,8 @@ int main() {
 	
 } 
 
-void add(string vm_type, int id, vector<vector<int>>& server_and_node, unordered_map<string,int>& daily_add) {
+void add(string vm_type, int id, vector<vector<int>>& server_and_node, 
+	unordered_map<string,vector<int>>& daily_add) {
 	Vm v;
 	v.info = vm_type_map[vm_type];
 	//找到一个服务器放进去 
@@ -151,7 +186,8 @@ void add(string vm_type, int id, vector<vector<int>>& server_and_node, unordered
 	vm_map[id] = v;
 }
 
-void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>& server_and_node, unordered_map<string,int>& daily_add) {
+void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>& server_and_node, 
+	unordered_map<string,vector<int>>& daily_add) {
 	//购买服务器用最笨的方法，找到第一个符合条件的服务器 
 	for (auto it = server_type_map.begin(); it != server_type_map.end(); ++it) {
 		if (v.info.on_double) {
@@ -165,8 +201,8 @@ void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>& server_and_node, 
 				server_map[server_index] = s;
 				v.server_id = server_index;
 				server_and_node.push_back({server_index});
+				daily_add[it->first].push_back(server_index);
 				server_index++;
-				daily_add[it->first]++;
 				break;
 			}
 		}
@@ -183,8 +219,8 @@ void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>& server_and_node, 
 				v.server_id = server_index;
 				v.node = 0;
 				server_and_node.push_back({server_index, 0});
+				daily_add[it->first].push_back(server_index);
 				server_index++;
-				daily_add[it->first]++;
 				break;
 			}
 		}
