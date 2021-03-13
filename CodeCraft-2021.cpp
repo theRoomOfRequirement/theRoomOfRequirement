@@ -30,7 +30,7 @@ unordered_map<string, Server_type_info> server_type_map;  //存储每种服务�
 int vm_type_cnt;
 unordered_map<string, Vm_type_info> vm_type_map;  //存储每种虚拟机的信息 
 int days;
-unordered_map<int, Server> server_map; //存储每个服务器的信息 
+vector<Server> servers; //存储每个服务器的信息 
 int server_index = 0; 
 unordered_map<int, Vm> vm_map;  //存储使用中的每个虚拟机的信息 
 
@@ -92,7 +92,7 @@ int main() {
 ////// 下面代码的作用就是把伪服务器下标转换为实际下标（从按照购买顺序存储转换伪按照输出中的申请顺序存储） 
 		vector<Server> fake_servers(add_cnt);
 		for (int k = server_index - add_cnt; k < server_index; ++k) {
-			fake_servers[k-(server_index - add_cnt)] = server_map[k];
+			fake_servers[k-(server_index - add_cnt)] = servers[k];
 		} 
 		unordered_map<int,int> fake_to_true_index;
 		int j = server_index - add_cnt;
@@ -105,7 +105,7 @@ int main() {
 						vm_map[vm_id].server_id = j;
 					}
 				}
-				server_map[j] = s;
+				servers[j] = s;
 				fake_to_true_index[fake_index] = j;
 				j += 1;
 			}
@@ -136,40 +136,53 @@ void add(string vm_type, int id, vector<vector<int>>& server_and_node,
 	Vm v;
 	v.info = vm_type_map[vm_type];
 	//找到一个服务器放进去 
+	//v1.1,用贪心算法，从所有可选服务器中选择剩余空间最小的服务器 
+	//定义空间大小 = cpu + 内存 结果2121936153 
 	bool have_place = false;
 	if (v.info.on_double == 0) {
-		for (auto it = server_map.begin(); it != server_map.end(); ++it) {
+		int index, node, min_cpu_and_momory_remained = INT_MAX;
+		for (int j = 0; j < servers.size(); ++j) {
 			for (int i = 0; i < 2; ++i) {
-				pair<int,int>& cpu_memory = it->second.remains[i];
-				if (cpu_memory.first >= v.info.cpu && cpu_memory.second >= v.info.memory) {
-					it->second.nodes[i].push_back(id);
-					cpu_memory.first -= v.info.cpu;
-					cpu_memory.second -= v.info.memory;
-					v.server_id = it->first;
-					v.node = i;
-					have_place = true;
-					server_and_node.push_back({it->first,i});
-					break;
+				pair<int,int>& cpu_memory = servers[j].remains[i];
+				if (cpu_memory.first >= v.info.cpu && cpu_memory.second >= v.info.memory
+					&& cpu_memory.first + cpu_memory.second < min_cpu_and_momory_remained) {
+						index = j;
+						node = i;
+						have_place = true;
 				}
 			}
-			if (have_place) break;
+		}
+		if (have_place) {
+			pair<int,int>& cpu_memory = servers[index].remains[node];
+			servers[index].nodes[node].push_back(id);
+			cpu_memory.first -= v.info.cpu;
+			cpu_memory.second -= v.info.memory;
+			v.server_id = index;
+			v.node = node;
+			server_and_node.push_back({index,node});
 		}
 	}
 	else {
-		for (auto it = server_map.begin(); it != server_map.end(); ++it) {
-			vector<pair<int,int>>& pairs = it->second.remains;
+		int index, min_cpu_and_momory_remained = INT_MAX;
+		for (int j = 0; j < servers.size(); ++j) {
+			vector<pair<int,int>>& pairs = servers[j].remains;
 			if (pairs[0].first >= v.info.cpu/2 && pairs[0].second >= v.info.memory/2
-				&& pairs[1].first >= v.info.cpu/2 && pairs[1].second >= v.info.memory/2) {
-					for (int i = 0; i < 2; ++i) {
-						it->second.nodes[i].push_back(id);
-						pairs[i].first -= v.info.cpu/2;
-						pairs[i].second -= v.info.memory/2; 
-					}
-					v.server_id = it->first;
+				&& pairs[1].first >= v.info.cpu/2 && pairs[1].second >= v.info.memory/2
+				&& pairs[0].first + pairs[0].second + pairs[1].first + pairs[1].second < min_cpu_and_momory_remained ) {
+					index = j;
 					have_place = true;
-					server_and_node.push_back({it->first});
-					break;
 				}
+		}
+		if (have_place) {
+			vector<pair<int,int>>& pairs = servers[index].remains;
+			for (int i = 0; i < 2; ++i) {
+				servers[index].nodes[i].push_back(id);
+				pairs[i].first -= v.info.cpu/2;
+				pairs[i].second -= v.info.memory/2; 
+			}
+			v.server_id = index;
+			have_place = true;
+			server_and_node.push_back({index});
 		}
 	}
 	//找不到一个现有服务器有足够空间，重新买一个并装入虚拟机 
@@ -181,7 +194,7 @@ void add(string vm_type, int id, vector<vector<int>>& server_and_node,
 
 void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>& server_and_node, 
 	unordered_map<string,vector<int>>& daily_add) {
-	//购买服务器用最笨的方法，找到第一个符合条件的服务器 
+//	购买服务器用最笨的方法，找到第一个符合条件的服务器 
 	for (auto it = server_type_map.begin(); it != server_type_map.end(); ++it) {
 		if (v.info.on_double) {
 			if (it->second.cpu >= v.info.cpu && it->second.memory >= v.info.memory) {
@@ -191,7 +204,8 @@ void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>& server_and_node,
 					s.nodes.push_back(list<int>(1,id));
 					s.remains.push_back(make_pair(it->second.cpu/2-v.info.cpu/2, it->second.memory/2-v.info.memory/2));
 				}	
-				server_map[server_index] = s;
+				//servers[server_index] = s;
+				servers.push_back(s);
 				v.server_id = server_index;
 				server_and_node.push_back({server_index});
 				daily_add[it->first].push_back(server_index);
@@ -208,7 +222,8 @@ void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>& server_and_node,
 				s.remains.resize(2);
 				s.remains[0] = make_pair(it->second.cpu/2-v.info.cpu, it->second.memory/2-v.info.memory);
 				s.remains[1] = make_pair(it->second.cpu/2, it->second.memory/2);
-				server_map[server_index] = s;
+				//servers[server_index] = s;
+				servers.push_back(s);
 				v.server_id = server_index;
 				v.node = 0;
 				server_and_node.push_back({server_index, 0});
@@ -224,7 +239,7 @@ void buy_server_and_set_vm(Vm& v, int id, vector<vector<int>>& server_and_node,
 void del(int id) {
 	//找到所在服务器并从中移除
 	Vm& v = vm_map[id];
-	Server& s = server_map[v.server_id];
+	Server& s = servers[v.server_id];
 	if (v.info.on_double == 1) {
 		for (int i = 0; i < 2; ++i) {
 			s.nodes[i].remove(id);
