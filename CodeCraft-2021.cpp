@@ -46,7 +46,6 @@ int main() {
 		cin >> ch >> si.type;
 		si.type.pop_back();
 		scanf("%d, %d, %d, %d)", &si.cpu, &si.memory, &si.hardware_cost, &si.daily_cost);
-		//cout << si.type << ' ' << si.cpu << ' ' << si.memory <<  endl;
 		server_type_map[si.type] = si;
 	}
 	
@@ -56,7 +55,6 @@ int main() {
 		cin >> ch >> vi.type;
 		vi.type.pop_back();
 		scanf("%d, %d, %d)", &vi.cpu, &vi.memory, &vi.on_double);
-		//cout << vi.type << ' ' << vi.cpu << vi.memory << ' ' << vi.on_double << endl;
 		vm_type_map[vi.type] = vi;
 	}
 	
@@ -91,6 +89,7 @@ int main() {
 ////// 当前不考虑虚拟机迁移 
 		printf("(migration, %d)\n", 0);
 		
+////// 下面代码的作用就是把伪服务器下标转换为实际下标（从按照购买顺序存储转换伪按照输出中的申请顺序存储） 
 		vector<Server> fake_servers(add_cnt);
 		for (int k = server_index - add_cnt; k < server_index; ++k) {
 			fake_servers[k-(server_index - add_cnt)] = server_map[k];
@@ -127,12 +126,6 @@ int main() {
 					printf("(%d, %c)\n", vec[0], vec[1] + 'A');
 			}
 		} 
-//		cout << endl;
-//		for (auto it = server_map.begin(); it != server_map.end(); ++it) {
-//			for (int i = 0; i < 2; ++i) {
-//				cout << char(i + 'A') << ": " << it->second.remains[i].first << ' ' << it->second.remains[i].second << endl;
-//			}
-//		} 
 	}
 	
 	
